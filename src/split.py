@@ -30,12 +30,6 @@ def split_dataset(args, train_dataset, test_dataset):
 
 
 def classify_label(dataset, num_classes: int):
-    """
-    统计数据集中各个标签的 index
-    :param dataset:
-    :param num_classes:
-    :return: label_list
-    """
     label_list = [[] for _ in range(num_classes)]
     for index, datum in enumerate(dataset):
         label_list[datum[1]].append(index)
@@ -43,13 +37,6 @@ def classify_label(dataset, num_classes: int):
 
 
 def show_clients_data_distribution(dataset, dict_split: dict, num_classes):
-    """
-    打印分布后的 list
-    :param dataset:
-    :param dict_split: 就是 dict_users
-    :param num_classes:
-    :return: list_per_client
-    """
     list_per_client = []
     clients_indices = list(dict_split.values())
     for client, indices in enumerate(clients_indices):
@@ -64,13 +51,6 @@ def show_clients_data_distribution(dataset, dict_split: dict, num_classes):
 
 
 def split_by_iid(dataset, num_clients: int, num_classes: int):
-    """
-    Sample I.I.D. client data from dataset
-    :param dataset:
-    :param num_clients:
-    :param num_classes:
-    :return: dict of image index (第i个client对应的数据集编号的集合，{int, set})
-    """
     dict_users = {}
 
     list_label_index = classify_label(dataset, num_classes)
@@ -92,14 +72,6 @@ def split_by_iid(dataset, num_clients: int, num_classes: int):
     return dict_users
 
 def split_by_dirichlet(train_dataset, num_clients, num_classes, dirichlet_alpha):
-    """
-    Sample non I.I.D. client data from dataset, split by dirichlet
-    :param train_dataset:
-    :param num_clients:
-    :para num_classes:
-    :param dirichlet_alpha:
-    :return: dict of image index (第i个client对应的数据集编号的集合，{int, set})
-    """
     train_dict_users = {}
 
     train_list_label_index = classify_label(train_dataset, num_classes)
@@ -114,7 +86,6 @@ def split_by_dirichlet(train_dataset, num_clients, num_classes, dirichlet_alpha)
         
         all_clients_have_min_samples = True
         for j in range(num_clients):
-            # 每个节点至少两个类
             if np.sort(proportions[:, j])[-2] * len(train_list_label_index[0]) < 1:
                 all_clients_have_min_samples = False
 
@@ -124,7 +95,6 @@ def split_by_dirichlet(train_dataset, num_clients, num_classes, dirichlet_alpha)
             i = i + 1
             print("Try to generate the Dirichlet distribution, Try {}!".format(i))
     
-    # 记录N个client分别对应样本集、测试集的索引
     for c, fracs in zip(train_list_label_index, proportions):
         for i, idcs in enumerate(np.split(c, (np.cumsum(fracs)[:-1] * len(c)).astype(int))):
             train_client_idcs[i] += [idcs]

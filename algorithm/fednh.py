@@ -44,19 +44,15 @@ class FedNH():
                 self.test_loaders[i] = self.server_test_loader
 
 
-        self.wandb = wandb.init(project=options.wandb_project, entity=options.wandb_entity,
-                                config=vars(options), name="FedNH")
+
 
     def trainer(self):
-        # # 计算类权重
         # w1 = np.true_divide(self.weight_data_np, self.weight_data_np.sum(axis=0))
-        # # 计算数据总量权重
         # w2 = np.true_divide(self.weight_data_np.sum(axis=1), self.weight_data_np.sum())
         w1_num = self.weight_data_np
         w2_num = self.weight_data_np.sum(axis=1)
         client_list = [i for i in range(self.options.num_clients)]
 
-        # 训练 round
         matrix_local, matrix_global = [], []
         for r in range(1, self.options.num_rounds + 1):
             print("Round {}:".format(r))
@@ -70,7 +66,7 @@ class FedNH():
             for c in client_select:
                 w1_sum_num += w1_num[c]
                 w2_sum_num += w2_num[c]   
-            w1_sum_num[w1_sum_num == 0.0] = 1e-12 # 处理0值
+            w1_sum_num[w1_sum_num == 0.0] = 1e-12
             w1 = np.true_divide(w1_num, w1_sum_num)
             w2 = np.true_divide(w2_num, w2_sum_num)
 
@@ -99,23 +95,15 @@ class FedNH():
 
                 print(" Server Acc: {:.4f}    PML Acc: {:.4f}    PMV Acc: {:.4f}".format(server_accuracy, mean(pml_accuracy_list),  mean(pmv_accuracy_list)))
 
-                self.wandb.log({"ACC/val_pml_acc": mean(pml_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_pmv_acc": mean(pmv_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_global_acc": server_accuracy}, step=r)
-                self.wandb.log({"LOSS/train_loss": mean(client_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_local_loss": mean(client_val_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_global_loss": val_loss}, step=r)
             else:
                 self.server_update1(select=client_select, w=w1)
                 self.server_update2(client_models=self.local_model, global_model=self.model, select=client_select, w=w2)
             
-        self.wandb.finish()
     
     def client_update(self, model, train_loader, weight_data, client):
         model.train()
         optimizer = optimizer_opt(model, self.options)
         criterion = nn.CrossEntropyLoss()
-        criterion_bcl = BalSCL(cls_num=self.options.num_classes)
         model = model.to(self.device)
         train_loss = 0.0
         for epoch in range(self.options.num_epochs):
@@ -126,7 +114,6 @@ class FedNH():
                 y = y.to(self.device)
                 optimizer.zero_grad()
                 features, logits = model(x, self.proto)
-                # 生成本地 proto
                 for index, label in enumerate(y):
                     f = torch.div(features[index].detach(), weight_data[label])
                     self.local_proto[client][label] = self.local_proto[client][label] + f
@@ -195,49 +182,3 @@ class FedNH():
 
 
 
-# proto : tensor(num_class, model.feature dim)
-class BalSCL(nn.Module):
-    def __init__(self, cls_num=None):
-        super(BalSCL, self).__init__()
-        self.cls_num = cls_num
-
-    def forward(self, proto, features, targets, temperature, device):
-
-        batch_size = features.shape[0]
-        # targets to [batch, 1]
-        targets = targets.contiguous().view(-1, 1)
-        targets_centers = torch.arange(self.cls_num, device=device).view(-1, 1)
-        # targets to [batch+batch+class_list, 1]
-        targets = torch.cat([targets, targets_centers], dim=0)
-        # the number of each class in this targets
-        batch_cls_count = torch.eye(self.cls_num)[targets].sum(dim=0).squeeze()
-
-        mask = torch.eq(targets[:batch_size], targets.T).float().to(device)
-        logits_mask = torch.scatter(
-            torch.ones_like(mask),
-            1,
-            torch.arange(batch_size).view(-1, 1).to(device),
-            0
-        )
-        mask = mask * logits_mask
-
-        # class-complement
-        features = torch.cat([features, proto.to(device)], dim=0)
-        logits = features[:batch_size].mm(features.T)
-        logits = torch.div(logits, temperature)
-
-        # For numerical stability
-        logits_max, _ = torch.max(logits, dim=1, keepdim=True)
-        logits = logits - logits_max.detach()
-
-        # class-averaging
-        exp_logits = torch.exp(logits) * logits_mask
-        per_ins_weight = torch.tensor([batch_cls_count[i] for i in targets], device=device).view(1, -1).expand(
-            batch_size, batch_size + self.cls_num) - mask
-        exp_logits_sum = exp_logits.div(per_ins_weight).sum(dim=1, keepdim=True)
-
-        log_prob = logits - torch.log(exp_logits_sum)
-        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
-
-        loss = - mean_log_prob_pos.mean()
-        return loss

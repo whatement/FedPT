@@ -27,7 +27,6 @@ class DatasetSplit(Dataset):
         return image, label
 
 
-# 返回 Client Dataloader dict, 以及每个节点的数据总量 (List)
 def client_dataloader(dataset, user_groups, num_clients, batch_size):
     client_loaders_dict = {}
     for i in range(num_clients):
@@ -41,7 +40,6 @@ def client_dataloader(dataset, user_groups, num_clients, batch_size):
     return client_loaders_dict
 
 
-# 返回测试数据集的 Dataloader
 def server_dataloader(dataset, batch_size):
     server_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     return server_loader

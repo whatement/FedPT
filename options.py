@@ -40,9 +40,9 @@ def args_parser():
     parser.add_argument('--digit_class', type=int, default=2)
     parser.add_argument('--class_sample', type=int, default=200)
 
-    # wandb
-    parser.add_argument('--wandb_project', type=str, default="exp1-cifar10-cnn")
-    parser.add_argument('--wandb_entity', type=str, default="whatement")
+    # # wandb
+    # parser.add_argument('--wandb_project', type=str, default="x")
+    # parser.add_argument('--wandb_entity', type=str, default="x")
 
     # Fedpt
     parser.add_argument('--fedpt_rate', type=float, default=0.75)

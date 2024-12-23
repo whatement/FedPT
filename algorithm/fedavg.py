@@ -40,14 +40,10 @@ class FedAvg():
             for i in range(options.num_clients):
                 self.test_loaders[i] = self.server_test_loader
 
-        self.wandb = wandb.init(project=options.wandb_project, entity=options.wandb_entity,
-                                config=vars(options), name="FedAvg")
-
     def trainer(self):
         w_num = self.weight_data_np.sum(axis=1)
         client_list = [i for i in range(self.options.num_clients)]
 
-        # 训练 round
         matrix_local, matrix_global = [], []
         for r in range(1, self.options.num_rounds + 1):
             print("Round {}:".format(r))
@@ -83,15 +79,7 @@ class FedAvg():
 
                 print(" Server Acc: {:.4f}    PML Acc: {:.4f}    PMV Acc: {:.4f}".format(server_accuracy, mean(pml_accuracy_list),  mean(pmv_accuracy_list)))
 
-                self.wandb.log({"ACC/val_pml_acc": mean(pml_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_pmv_acc": mean(pmv_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_global_acc": server_accuracy}, step=r)
-                self.wandb.log({"LOSS/train_loss": mean(client_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_local_loss": mean(client_val_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_global_loss": val_loss}, step=r)
-
-        self.wandb.finish()
-
+                
     def client_update(self, model, train_loader):
         model.train()
         optimizer = optimizer_opt(model, self.options)

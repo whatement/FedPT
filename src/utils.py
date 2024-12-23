@@ -10,7 +10,6 @@ import json
 from sklearn import metrics
 
 
-# 用于更新与记录随着次数n增大的平均值value，v为前n次平均值，x为最新一次输入值
 class Averager:
     def __init__(self):
         self.n = 0
@@ -24,7 +23,6 @@ class Averager:
         return self.v
 
 
-# 计算总体预测准确率 accuracy
 def matrix_score(predict_y, img_y, num_classes, weight_data_np):
 
     matrix = metrics.confusion_matrix(img_y, predict_y, labels=range(num_classes))
@@ -41,18 +39,16 @@ def matrix_score(predict_y, img_y, num_classes, weight_data_np):
     return matrix, pml_accuracy.sum(), pmv_accuracy.sum(), recall
 
 
-# 计算总体预测精度 precision
 def sum_precision_score(predict_y, img_y):
     precision = metrics.precision_score(img_y, predict_y)
     return precision
 
 
-# 随机数种子初始化
 def seed_setup(seed):
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)  # 让显卡产生的随机数一致
-    torch.cuda.manual_seed_all(seed)  # 多卡模式下，让所有显卡生成的随机数一致？这个待验证
-    np.random.seed(seed)  # numpy产生的随机数一致
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) 
+    np.random.seed(seed) 
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 

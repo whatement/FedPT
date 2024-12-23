@@ -48,8 +48,6 @@ class FedPT():
             for i in range(options.num_clients):
                 self.test_loaders[i] = self.server_test_loader
 
-        self.wandb = wandb.init(project=options.wandb_project, entity=options.wandb_entity,
-                                config=vars(options), name="FedPT_{}_{}".format(self.lamb, self.gam))
 
     def trainer(self):
         w1_num = self.weight_data_np
@@ -57,7 +55,6 @@ class FedPT():
 
         client_list = [i for i in range(self.options.num_clients)]
 
-        # 训练 round
         matrix_local, matrix_global = [], []
         for r in range(1, self.options.num_rounds + 1):
             print("Round {}:".format(r))
@@ -71,7 +68,7 @@ class FedPT():
             for c in client_select:
                 w1_sum_num += w1_num[c]
                 w2_sum_num += w2_num[c]   
-            w1_sum_num[w1_sum_num == 0.0] = 1e-12 # 处理0值
+            w1_sum_num[w1_sum_num == 0.0] = 1e-12 
             w1 = np.true_divide(w1_num, w1_sum_num)
             w2 = np.true_divide(w2_num, w2_sum_num)
 
@@ -98,17 +95,7 @@ class FedPT():
                 matrix, server_accuracy, _, server_label, val_loss = self.test(model=self.model, loader=self.server_test_loader, weight_data=self.weight_data_np.sum(axis=0))
                 matrix_global.append(matrix)
 
-                print(" Server Acc: {:.4f}    PML Acc: {:.4f}    PMV Acc: {:.4f}".
-                        format(server_accuracy, mean(pml_accuracy_list),  mean(pmv_accuracy_list)))
-
-                self.wandb.log({"ACC/val_pml_acc": mean(pml_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_pmv_acc": mean(pmv_accuracy_list)}, step=r)
-                self.wandb.log({"ACC/val_global_acc": server_accuracy}, step=r)
-                self.wandb.log({"LOSS/train_loss": mean(client_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_local_loss": mean(client_val_loss_list)}, step=r)
-                self.wandb.log({"LOSS/val_global_loss": val_loss}, step=r)
-
-        self.wandb.finish()
+                print(" Server Acc: {:.4f}    PML Acc: {:.4f}    PMV Acc: {:.4f}".format(server_accuracy, mean(pml_accuracy_list),  mean(pmv_accuracy_list)))
 
     def client_update(self, model, train_loader, weight_data, client):
         model.train()
@@ -127,7 +114,6 @@ class FedPT():
                 y = y.to(self.device)
                 optimizer.zero_grad()
                 features, logits = model(x, proto)
-                # 生成本地 proto
                 for index, label in enumerate(y):
                     f = torch.div(features[index].detach(), weight_data[label])
                     self.local_proto[client][label] = self.local_proto[client][label] + f * (1 - self.options.fedpt_rate)
@@ -192,45 +178,34 @@ class FedPT():
 
 
 
-class BalSupConLoss(nn.Module):
-    def __init__(self, num_classes, device):
-        super(BalSupConLoss, self).__init__()
-        self.num_classes = num_classes
-        self.device = device
+class BalSCL(nn.Module):
+    def __init__(self, cls_num=None):
+        super(BalSCL, self).__init__()
+        self.cls_num = cls_num
 
-    def forward(self, prototypes, features, targets, temperature):
-        # 获取批次大小
+    def forward(self, proto, features, targets, temperature, device):
+
         batch_size = features.shape[0]
-
-        # B+P
         targets = targets.contiguous().view(-1, 1)
-        targets = torch.cat([targets, torch.arange(self.num_classes, device=self.device).view(-1, 1)], dim=0)
+        targets_centers = torch.arange(self.cls_num, device=device).view(-1, 1)
+        targets = torch.cat([targets, targets_centers], dim=0)
+        batch_cls_count = torch.eye(self.cls_num)[targets].sum(dim=0).squeeze()
 
-        # 计算每个类别的实例数量,计算损失的掩码以处理类别平衡
-        class_counts = torch.eye(self.num_classes)[targets].sum(dim=0).squeeze() 
-        mask = torch.eq(targets[:batch_size], targets.T).float().to(self.device)
-        logits_mask = torch.scatter(torch.ones_like(mask), 1, torch.arange(batch_size).view(-1, 1).to(self.device), 0)
+        mask = torch.eq(targets[:batch_size], targets.T).float().to(device)
+        logits_mask = torch.scatter(torch.ones_like(mask), 1, torch.arange(batch_size).view(-1, 1).to(device), 0)
         mask = mask * logits_mask
 
-        # 连接特征向量和原型向量以进行计算
-        features = torch.cat([features, prototypes.to(self.device)], dim=0)
-
-        # 计算Logits
+        features = torch.cat([features, proto.to(device)], dim=0)
         logits = features[:batch_size].mm(features.T)
         logits = torch.div(logits, temperature)
-
-        # 减去Logits中的最大值以提高数值稳定性
         logits_max, _ = torch.max(logits, dim=1, keepdim=True)
         logits = logits - logits_max.detach()
-
-        # 计算指数Logits和实例权重
         exp_logits = torch.exp(logits) * logits_mask
-        instance_weights = torch.tensor([class_counts[i] for i in targets], device=self.device).view(1, -1).expand(batch_size, batch_size + self.num_classes) - mask
-
-        # 计算损失并返回
-        exp_logits_sum = exp_logits.div(instance_weights).sum(dim=1, keepdim=True)
+        per_ins_weight = torch.tensor([batch_cls_count[i] for i in targets], device=device).view(1, -1).expand(
+            batch_size, batch_size + self.cls_num) - mask
+        exp_logits_sum = exp_logits.div(per_ins_weight).sum(dim=1, keepdim=True)
         log_prob = logits - torch.log(exp_logits_sum)
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+
         loss = - mean_log_prob_pos.mean()
         return loss
-

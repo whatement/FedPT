@@ -62,7 +62,7 @@ def init_set(args):
         raise ValueError("No such dataset: {}".format(args.dataset))
 
     if args.model == 'resnet18':
-        m = resnet18(pretrained=False, num_classes=args.num_classes)  # Pytorch 本身的 Round 问题，同一套随机种子结果不能复现
+        m = resnet18(pretrained=False, num_classes=args.num_classes) 
 
     elif args.model == 'cnn_cifar':
         m = CNNCifar(num_classes=args.num_classes)
@@ -76,16 +76,12 @@ def init_set(args):
 if __name__ == '__main__':
     args = args_parser()
 
-    # 初始化随机数种子
     seed_setup(args.seed)
 
-    # 初始化设置数据集和模型
     train_dataset, test_dataset, model = init_set(args)
 
-    # 划分 Non-IID分布
     train_user_groups, test_user_groups, data_distribution_lists = split_dataset(args, train_dataset, test_dataset)
-    
-    # 选取算法
+
     if args.algorithm == "fedavg":
         alg = FedAvg(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
     
@@ -94,14 +90,34 @@ if __name__ == '__main__':
     
     elif args.algorithm == "fednh":
         alg = FedNH(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedmoon":
+    #     alg = FedMoon(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedproc":
+    #     alg = FedProc(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedproto":
+    #     alg = FedProto(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedprox":
+    #     alg = FedProx(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedrep":
+    #     alg = FedRep(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
     
-    elif args.algorithm == "fedetf":
-        alg = FedETF(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+    # elif args.algorithm == "fedrod":
+    #     alg = FedRod(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "fedetf":
+    #     alg = FedETF(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
+
+    # elif args.algorithm == "local":
+    #     alg = Local(train_dataset, test_dataset, train_user_groups, test_user_groups, data_distribution_lists, model, args)
     
     else:
         raise NotImplementedError
 
-    # 执行函数
     alg.trainer()
 
 
